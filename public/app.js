@@ -253,7 +253,10 @@ async function loadMessages(isSilent = false) {
 
   try {
     let res = await fetch('/api/messages', {
-      headers: { 'Authorization': `Bearer ${acc.token}` }
+      headers: {
+        'Authorization': `Bearer ${acc.token}`,
+        'X-Provider': acc.provider || 'mailtm'
+      }
     });
 
     if (!res.ok && (res.status === 401 || res.status === 403 || res.status === 500)) {
@@ -327,7 +330,10 @@ async function selectMessage(msgId) {
 
   try {
     let res = await fetch(`/api/messages?msgId=${msgId}`, {
-      headers: { 'Authorization': `Bearer ${acc.token}` }
+      headers: {
+        'Authorization': `Bearer ${acc.token}`,
+        'X-Provider': acc.provider || 'mailtm'
+      }
     });
 
     if (!res.ok && (res.status === 401 || res.status === 403 || res.status === 500)) {
