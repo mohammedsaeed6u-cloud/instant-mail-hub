@@ -8,6 +8,7 @@
   "author": "Antigravity",
   "license": "MIT",
   "dependencies": {
+    "nodemailer": "^10.0.10",
     "pg": "^8.23.0"
   }
 }

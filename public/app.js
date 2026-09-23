@@ -562,6 +562,126 @@ fileImport.addEventListener('change', (e) => {
   reader.readAsText(file);
 });
 
+// Settings Modal Elements
+const settingsModal = document.getElementById('settings-modal');
+const btnOpenSettings = document.getElementById('btn-open-settings');
+const btnCloseSettings = document.getElementById('btn-close-settings');
+const formSettings = document.getElementById('forwarding-settings-form');
+const checkForwardingEnabled = document.getElementById('check-forwarding-enabled');
+const inputTargetEmail = document.getElementById('input-target-email');
+const inputSmtpUser = document.getElementById('input-smtp-user');
+const inputSmtpPass = document.getElementById('input-smtp-pass');
+const inputTgToken = document.getElementById('input-tg-token');
+const inputTgChat = document.getElementById('input-tg-chat');
+const btnTestForwarding = document.getElementById('btn-test-forwarding');
+
+// Open & Load Settings
+if (btnOpenSettings) {
+  btnOpenSettings.addEventListener('click', async () => {
+    settingsModal.classList.remove('hidden');
+    try {
+      const res = await fetch('/api/settings');
+      if (res.ok) {
+        const data = await res.json();
+        checkForwardingEnabled.checked = data.forwarding_enabled === 'true';
+        inputTargetEmail.value = data.target_email || '';
+        inputSmtpUser.value = data.smtp_user || '';
+        inputSmtpPass.value = data.has_smtp_pass ? '••••••••' : '';
+        inputTgToken.value = data.telegram_token || '';
+        inputTgChat.value = data.telegram_chat_id || '';
+      }
+    } catch (e) {
+      console.warn('Failed to load settings:', e);
+    }
+  });
+}
+
+const closeSettings = () => settingsModal.classList.add('hidden');
+if (btnCloseSettings) btnCloseSettings.addEventListener('click', closeSettings);
+
+// Save Settings
+if (formSettings) {
+  formSettings.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const saveBtn = document.getElementById('btn-save-settings');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'جاري الحفظ...';
+
+    const payload = {
+      forwarding_enabled: checkForwardingEnabled.checked,
+      target_email: inputTargetEmail.value.trim(),
+      smtp_user: inputSmtpUser.value.trim(),
+      telegram_token: inputTgToken.value.trim(),
+      telegram_chat_id: inputTgChat.value.trim()
+    };
+    if (inputSmtpPass.value && inputSmtpPass.value !== '••••••••') {
+      payload.smtp_pass = inputSmtpPass.value.trim();
+    }
+
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('تم حفظ إعدادات التحويل التلقائي بنجاح! 💾');
+        closeSettings();
+      } else {
+        showToast(data.error || 'فشل حفظ الإعدادات');
+      }
+    } catch (err) {
+      showToast('خطأ أثناء حفظ الإعدادات');
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = '💾 حفظ الإعدادات';
+    }
+  });
+}
+
+// Test Forwarding
+if (btnTestForwarding) {
+  btnTestForwarding.addEventListener('click', async () => {
+    const target_email = inputTargetEmail.value.trim();
+    if (!target_email) {
+      return showToast('يرجى إدخال إيميلك الشخصي أولاً');
+    }
+
+    btnTestForwarding.disabled = true;
+    btnTestForwarding.textContent = 'جاري إرسال التجربة...';
+
+    const payload = {
+      target_email,
+      smtp_user: inputSmtpUser.value.trim(),
+      telegram_token: inputTgToken.value.trim(),
+      telegram_chat_id: inputTgChat.value.trim()
+    };
+    if (inputSmtpPass.value && inputSmtpPass.value !== '••••••••') {
+      payload.smtp_pass = inputSmtpPass.value.trim();
+    }
+
+    try {
+      const res = await fetch('/api/settings/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(data.message || 'تم إرسال الرسالة التجريبية بنجاح! ✉️');
+      } else {
+        showToast(data.error || 'فشل إرسال الرسالة التجريبية');
+      }
+    } catch (err) {
+      showToast('خطأ أثناء فحص الإرسال');
+    } finally {
+      btnTestForwarding.disabled = false;
+      btnTestForwarding.textContent = '✉️ إرسال رسالة تجربة';
+    }
+  });
+}
+
 // Init on Load
 window.addEventListener('DOMContentLoaded', async () => {
   await loadAccounts();

@@ -338,6 +338,86 @@ async function getArchivedMessageDetails(msgId) {
   return null;
 }
 
+const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+
+async function getSettings() {
+  await initDb();
+  if (pool) {
+    try {
+      const res = await pool.query('SELECT key, value FROM mail_settings');
+      const settings = {};
+      for (const row of res.rows) {
+        settings[row.key] = row.value;
+      }
+      return settings;
+    } catch (e) {
+      console.warn('DB getSettings failed:', e.message);
+    }
+  }
+  const loaded = localLoad(SETTINGS_FILE);
+  return Array.isArray(loaded) ? {} : (loaded || {});
+}
+
+async function saveSettings(settingsObj) {
+  await initDb();
+  if (pool) {
+    try {
+      for (const [key, val] of Object.entries(settingsObj)) {
+        await pool.query(`
+          INSERT INTO mail_settings (key, value, updated_at)
+          VALUES ($1, $2, NOW())
+          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW();
+        `, [key, String(val ?? '')]);
+      }
+    } catch (e) {
+      console.warn('DB saveSettings failed:', e.message);
+    }
+  }
+  const current = localLoad(SETTINGS_FILE);
+  const base = Array.isArray(current) ? {} : (current || {});
+  localSave(SETTINGS_FILE, { ...base, ...settingsObj });
+}
+
+async function getUnforwardedMessages() {
+  await initDb();
+  if (pool) {
+    try {
+      const res = await pool.query(`
+        SELECT * FROM mail_messages 
+        WHERE is_forwarded = FALSE 
+        ORDER BY received_at ASC 
+        LIMIT 20
+      `);
+      return res.rows.map(row => ({
+        id: row.id,
+        accountId: row.account_id,
+        accountAddress: row.account_address,
+        from: row.sender,
+        subject: row.subject,
+        intro: row.intro,
+        text: row.body_text,
+        html: row.body_html,
+        otp: row.otp,
+        createdAt: row.received_at
+      }));
+    } catch (e) {
+      console.warn('DB getUnforwardedMessages failed:', e.message);
+    }
+  }
+  return [];
+}
+
+async function markMessageAsForwarded(msgId) {
+  await initDb();
+  if (pool) {
+    try {
+      await pool.query('UPDATE mail_messages SET is_forwarded = TRUE, forwarded_at = NOW() WHERE id = $1', [String(msgId)]);
+    } catch (e) {
+      console.warn('DB markMessageAsForwarded failed:', e.message);
+    }
+  }
+}
+
 module.exports = {
   initDb,
   getAccounts,
@@ -345,5 +425,9 @@ module.exports = {
   deleteAccount,
   getArchivedMessages,
   saveArchivedMessage,
-  getArchivedMessageDetails
+  getArchivedMessageDetails,
+  getSettings,
+  saveSettings,
+  getUnforwardedMessages,
+  markMessageAsForwarded
 };

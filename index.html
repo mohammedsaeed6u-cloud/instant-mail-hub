@@ -119,6 +119,9 @@
             </label>
             <span class="toggle-label">تحديث تلقائي (5 ثوانٍ)</span>
           </div>
+          <button id="btn-open-settings" class="btn btn-outline" style="border-color:#3b82f6;color:#60a5fa;display:flex;align-items:center;gap:6px;" title="إعدادات تحويل الرسائل لإيميلك الشخصي">
+            <span>⚙️</span> تحويل لإيميلي
+          </button>
           <button id="btn-refresh" class="btn btn-secondary">
             🔄 تحديث الآن
           </button>
@@ -252,6 +255,63 @@
         <div class="modal-actions">
           <button type="button" id="btn-cancel-reclaim" class="btn btn-secondary">إلغاء</button>
           <button type="submit" id="btn-submit-reclaim" class="btn btn-primary">🔗 ربط واسترجاع الحساب الآن</button>
+        </div>
+      </form>
+  <!-- Forwarding Settings Modal -->
+  <div id="settings-modal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-box" style="max-width:520px;">
+      <div class="modal-header">
+        <h3>⚙️ إعدادات التحويل التلقائي للرسائل</h3>
+        <button id="btn-close-settings" class="close-btn">&times;</button>
+      </div>
+
+      <form id="forwarding-settings-form">
+        <div style="background:rgba(59, 130, 246, 0.1);border:1px solid rgba(59, 130, 246, 0.25);border-radius:10px;padding:12px;margin-bottom:16px;">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:bold;color:#60a5fa;">
+            <input type="checkbox" id="check-forwarding-enabled" style="width:18px;height:18px;">
+            <span>تفعيل تحويل أي رسالة تصل إلى إيميلك الشخصي 🚀</span>
+          </label>
+          <small style="color:var(--text-muted);display:block;margin-top:6px;font-size:0.75rem;">
+            عند التفعيل، فور وصول أي كود تفعيل أو إيميل إلى أي من حساباتك، سيقوم السيرفر بإرساله إلى بريدك الشخصي فوراً بدون الحاجة لفتح الموقع!
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label for="input-target-email"><strong>إيميلك الشخصي الذي تريد استلام الرسائل عليه:</strong></label>
+          <input type="email" id="input-target-email" placeholder="مثال: yourname@gmail.com" dir="ltr" required>
+        </div>
+
+        <div style="border-top:1px solid var(--border-color);padding-top:14px;margin-top:14px;">
+          <h4 style="font-size:0.9rem;color:#cbd5e1;margin-bottom:10px;">إعدادات خادم الإرسال (Gmail SMTP):</h4>
+          
+          <div class="form-group">
+            <label for="input-smtp-user">إيميل جيميل المُرسل (Gmail Sender):</label>
+            <input type="email" id="input-smtp-user" placeholder="مثال: myalertsender@gmail.com" dir="ltr">
+          </div>
+
+          <div class="form-group">
+            <label for="input-smtp-pass">كلمة مرور التطبيقات (Google App Password):</label>
+            <input type="password" id="input-smtp-pass" placeholder="16 حرفاً بدون مسافات (أو اتركها كما هي)">
+            <small style="color:#94a3b8;font-size:0.75rem;display:block;margin-top:5px;line-height:1.4;">
+              💡 للحصول على كلمة مرور التطبيقات في 30 ثانية من حساب جوجل:
+              <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color:#60a5fa;text-decoration:underline;">اضغط هنا لفتح Google App Passwords</a>، اكتب أي اسم (مثلاً MailHub) وانسخ الـ 16 حرفاً.
+            </small>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--border-color);padding-top:14px;margin-top:14px;">
+          <h4 style="font-size:0.9rem;color:#cbd5e1;margin-bottom:6px;">إشعار فوري عبر تيليجرام (اختياري):</h4>
+          <small style="color:var(--text-muted);display:block;margin-bottom:10px;font-size:0.72rem;">إذا أردت استلام الأكواد كرسالة فورية على هاتفك في تيليجرام أيضاً:</small>
+          <div style="display:flex;gap:8px;">
+            <input type="text" id="input-tg-token" placeholder="Bot Token (اختياري)" dir="ltr" style="flex:1;">
+            <input type="text" id="input-tg-chat" placeholder="Chat ID (اختياري)" dir="ltr" style="flex:1;">
+          </div>
+        </div>
+
+        <div class="modal-actions" style="margin-top:20px;display:flex;gap:10px;">
+          <button type="button" id="btn-test-forwarding" class="btn btn-secondary">✉️ إرسال رسالة تجربة</button>
+          <button type="submit" id="btn-save-settings" class="btn btn-primary" style="flex:1;">💾 حفظ الإعدادات</button>
         </div>
       </form>
     </div>
