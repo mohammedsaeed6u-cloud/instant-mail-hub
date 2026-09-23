@@ -3,6 +3,8 @@ let currentMessageId = null;
 let accounts = [];
 let pollInterval = null;
 
+const STORAGE_KEY = 'instant_mail_accounts_v1';
+
 // DOM Elements
 const accountsListEl = document.getElementById('accounts-list');
 const accountsCountEl = document.getElementById('accounts-count');
@@ -38,6 +40,11 @@ const inputUsername = document.getElementById('input-username');
 const inputNote = document.getElementById('input-note');
 const toastEl = document.getElementById('toast');
 
+// Backup Elements
+const btnExport = document.getElementById('btn-export-accounts');
+const btnImport = document.getElementById('btn-import-accounts');
+const fileImport = document.getElementById('file-import-accounts');
+
 // Toast Notification
 function showToast(message, duration = 3000) {
   toastEl.textContent = message;
@@ -70,6 +77,24 @@ function formatDate(dateStr) {
   return d.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) + ' ' + d.toLocaleDateString('ar-EG');
 }
 
+// LocalStorage Helpers
+function getSavedAccounts() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function persistAccounts(list) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  } catch (e) {
+    console.error('LocalStorage save error:', e);
+  }
+}
+
 // Fetch Domains
 async function loadDomains() {
   try {
@@ -85,27 +110,37 @@ async function loadDomains() {
   }
 }
 
-// Load Accounts
+// Load Accounts (from LocalStorage, with fallback migration from server)
 async function loadAccounts() {
-  try {
-    const res = await fetch('/api/accounts');
-    const data = await res.json();
-    accounts = data.accounts || [];
-    renderAccounts();
+  accounts = getSavedAccounts();
 
-    if (accounts.length > 0 && !currentAccountId) {
-      selectAccount(accounts[0].id);
-    } else if (accounts.length === 0) {
-      currentAccountId = null;
-      currentEmailEl.textContent = 'لا يوجد إيميل منشأ بعد';
-      btnCopyEmail.disabled = true;
-      messagesListEl.innerHTML = '<div class="empty-state">اضغط على زر "إنشاء بريد جديد" للبدء</div>';
-      emptyViewerEl.classList.remove('hidden');
-      messageDetailEl.classList.add('hidden');
+  // If local storage is empty, try migrating from server /api/accounts (for local mode)
+  if (accounts.length === 0) {
+    try {
+      const res = await fetch('/api/accounts');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.accounts && data.accounts.length > 0) {
+          accounts = data.accounts;
+          persistAccounts(accounts);
+        }
+      }
+    } catch (e) {
+      // serverless or no /api/accounts
     }
-  } catch (err) {
-    console.error('Failed to load accounts:', err);
-    accountsListEl.innerHTML = '<div class="loading-state">فشل تحميل الحسابات</div>';
+  }
+
+  renderAccounts();
+
+  if (accounts.length > 0 && !currentAccountId) {
+    selectAccount(accounts[0].id);
+  } else if (accounts.length === 0) {
+    currentAccountId = null;
+    currentEmailEl.textContent = 'لا يوجد إيميل منشأ بعد';
+    btnCopyEmail.disabled = true;
+    messagesListEl.innerHTML = '<div class="empty-state">اضغط على زر "إنشاء بريد جديد" للبدء</div>';
+    emptyViewerEl.classList.remove('hidden');
+    messageDetailEl.classList.add('hidden');
   }
 }
 
@@ -130,7 +165,6 @@ function renderAccounts() {
     </div>
   `).join('');
 
-  // Attach event listeners
   document.querySelectorAll('.account-item').forEach(item => {
     item.addEventListener('click', (e) => {
       if (e.target.closest('.account-actions')) return;
@@ -162,33 +196,49 @@ async function selectAccount(id) {
 
   currentEmailEl.textContent = acc.address;
   btnCopyEmail.disabled = false;
-  renderAccounts(); // update active class
+  renderAccounts();
   await loadMessages();
 }
 
 // Delete Account
 async function deleteAccount(id) {
-  try {
-    const res = await fetch(`/api/accounts/${id}`, { method: 'DELETE' });
-    if (res.ok) {
-      showToast('تم حذف الحساب بنجاح');
-      if (currentAccountId === id) currentAccountId = null;
-      await loadAccounts();
-    }
-  } catch (err) {
-    showToast('فشل حذف الحساب');
+  const acc = accounts.find(a => a.id === id);
+  if (acc && acc.token) {
+    // Attempt remote deletion silently
+    fetch(`/api/accounts/delete?id=${id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${acc.token}` }
+    }).catch(() => {});
   }
+
+  accounts = accounts.filter(a => a.id !== id);
+  persistAccounts(accounts);
+  showToast('تم حذف الحساب بنجاح');
+  if (currentAccountId === id) currentAccountId = null;
+  await loadAccounts();
 }
 
 // Load Messages for current account
 async function loadMessages(isSilent = false) {
   if (!currentAccountId) return;
+  const acc = accounts.find(a => a.id === currentAccountId);
+  if (!acc || !acc.token) return;
+
   if (!isSilent) {
     messagesListEl.innerHTML = '<div class="loading-state">جاري فحص الرسائل...</div>';
   }
 
   try {
-    const res = await fetch(`/api/accounts/${currentAccountId}/messages`);
+    // Try Vercel route first: /api/messages with header
+    let res = await fetch('/api/messages', {
+      headers: { 'Authorization': `Bearer ${acc.token}` }
+    });
+
+    // Fallback to local server route if 404
+    if (res.status === 404) {
+      res = await fetch(`/api/accounts/${currentAccountId}/messages`);
+    }
+
     const data = await res.json();
     const messages = data.messages || [];
     messagesCountEl.textContent = `${messages.length} رسائل`;
@@ -197,7 +247,7 @@ async function loadMessages(isSilent = false) {
       messagesListEl.innerHTML = `
         <div class="empty-state">
           <p>لا توجد رسائل واردة حتى الآن.</p>
-          <small>صندوق الوارد يفحص تلقائياً كل بضع ثوانٍ</small>
+          <small>صندوق الوارد يفحص تلقائياً كل 5 ثوانٍ</small>
         </div>
       `;
       if (!currentMessageId) {
@@ -225,7 +275,6 @@ async function loadMessages(isSilent = false) {
       });
     });
 
-    // Auto-select latest message if none selected
     if (!currentMessageId && messages.length > 0) {
       selectMessage(messages[0].id);
     }
@@ -242,8 +291,20 @@ async function selectMessage(msgId) {
   currentMessageId = msgId;
   renderMessagesActiveState();
 
+  const acc = accounts.find(a => a.id === currentAccountId);
+  if (!acc || !acc.token) return;
+
   try {
-    const res = await fetch(`/api/accounts/${currentAccountId}/messages/${msgId}`);
+    // Try Vercel serverless query first
+    let res = await fetch(`/api/messages?msgId=${msgId}`, {
+      headers: { 'Authorization': `Bearer ${acc.token}` }
+    });
+
+    // Fallback to local server route if needed
+    if (res.status === 404) {
+      res = await fetch(`/api/accounts/${currentAccountId}/messages/${msgId}`);
+    }
+
     const msg = await res.json();
 
     emptyViewerEl.classList.add('hidden');
@@ -254,7 +315,6 @@ async function selectMessage(msgId) {
     msgToEl.textContent = (msg.to || []).map(t => t.address).join(', ');
     msgDateEl.textContent = formatDate(msg.createdAt);
 
-    // OTP detection
     if (msg.otp) {
       otpCardEl.classList.remove('hidden');
       otpCodeEl.textContent = msg.otp;
@@ -263,14 +323,12 @@ async function selectMessage(msgId) {
       otpCardEl.classList.add('hidden');
     }
 
-    // Set HTML view
     if (msg.html) {
       msgIframeEl.srcdoc = msg.html;
     } else {
       msgIframeEl.srcdoc = `<div style="font-family:sans-serif;padding:20px;white-space:pre-wrap;">${msg.text || ''}</div>`;
     }
 
-    // Set Text view
     msgTextContentEl.textContent = msg.text || '(لا يوجد نص عادي)';
   } catch (err) {
     console.error('Failed to fetch message details:', err);
@@ -313,9 +371,12 @@ createForm.addEventListener('submit', async (e) => {
     });
     const data = await res.json();
     if (data.success && data.account) {
+      accounts.unshift(data.account);
+      persistAccounts(accounts);
+
       showToast(`تم إنشاء الإيميل: ${data.account.address}`);
       closeModal();
-      await loadAccounts();
+      renderAccounts();
       selectAccount(data.account.id);
     } else {
       showToast(data.error || 'فشل إنشاء الحساب');
@@ -368,6 +429,56 @@ function setupAutoRefresh() {
 }
 
 autoRefreshCheck.addEventListener('change', setupAutoRefresh);
+
+// Export & Import Backup Handlers
+btnExport.addEventListener('click', () => {
+  if (accounts.length === 0) {
+    return showToast('لا توجد حسابات لتصديرها');
+  }
+  const blob = new Blob([JSON.stringify(accounts, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `instant_mail_backup_${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  showToast('تم تحميل ملف النسخة الاحتياطية بنجاح 💾');
+});
+
+btnImport.addEventListener('click', () => {
+  fileImport.click();
+});
+
+fileImport.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    try {
+      const imported = JSON.parse(event.target.result);
+      if (Array.isArray(imported)) {
+        // Merge without duplicates
+        const existingIds = new Set(accounts.map(a => a.id));
+        let addedCount = 0;
+        for (const item of imported) {
+          if (item.id && !existingIds.has(item.id)) {
+            accounts.push(item);
+            addedCount++;
+          }
+        }
+        persistAccounts(accounts);
+        renderAccounts();
+        showToast(`تم استيراد ${addedCount} حساب بنجاح! 🎉`);
+        if (accounts.length > 0 && !currentAccountId) {
+          selectAccount(accounts[0].id);
+        }
+      } else {
+        showToast('ملف غير صالح');
+      }
+    } catch (err) {
+      showToast('خطأ في قراءة الملف');
+    }
+  };
+  reader.readAsText(file);
+});
 
 // Init
 window.addEventListener('DOMContentLoaded', async () => {
