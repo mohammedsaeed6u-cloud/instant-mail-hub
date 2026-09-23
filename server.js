@@ -158,8 +158,7 @@ const server = http.createServer(async (req, res) => {
         'sharklasers.com',
         'guerrillamail.com',
         'grr.la',
-        'guerrillamailblock.com',
-        'uberip.com'
+        'guerrillamailblock.com'
       ];
       return sendJson({ domains });
     }

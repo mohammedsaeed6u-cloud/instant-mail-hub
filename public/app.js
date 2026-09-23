@@ -247,6 +247,20 @@ async function loadMessages(isSilent = false) {
   const acc = accounts.find(a => a.id === currentAccountId);
   if (!acc || !acc.token) return;
 
+  // Gracefully handle legacy uberip.com accounts
+  if (acc.address && acc.address.includes('@uberip.com')) {
+    if (!isSilent) {
+      messagesListEl.innerHTML = `
+        <div class="empty-state">
+          <p style="color:#f87171;font-weight:bold;margin-bottom:8px">⚠️ حساب قديم من نطاق uberip</p>
+          <p style="font-size:0.82rem;color:#cbd5e1;margin-bottom:12px">سيرفرات uberip تمنع الاتصال السحابي. يرجى حذف هذا الحساب واستخدام الإيميل الجديد (sharklasers) الشغال معك بنجاح.</p>
+          <button onclick="deleteAccount('${acc.id}')" class="btn btn-sm btn-secondary">حذف هذا الحساب 🗑️</button>
+        </div>
+      `;
+    }
+    return;
+  }
+
   if (!isSilent) {
     messagesListEl.innerHTML = '<div class="loading-state">جاري فحص الرسائل...</div>';
   }
