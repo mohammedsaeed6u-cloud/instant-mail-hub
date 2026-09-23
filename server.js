@@ -329,8 +329,8 @@ const server = http.createServer(async (req, res) => {
         }
 
         const listData = await guerrillaRequest({
-          f: 'check_email',
-          seq: 0,
+          f: 'get_email_list',
+          offset: 0,
           sid_token: token
         });
         const raw = listData.list || [];

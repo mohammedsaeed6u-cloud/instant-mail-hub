@@ -288,7 +288,21 @@ async function loadMessages(isSilent = false) {
     }
 
     const data = await res.json();
-    const messages = data.messages || [];
+    const incoming = data.messages || [];
+
+    if (!window.messagesCache) window.messagesCache = {};
+    if (!window.messagesCache[currentAccountId]) {
+      window.messagesCache[currentAccountId] = [];
+    }
+
+    // Merge incoming with cache to guarantee messages never disappear
+    const existingMap = new Map(window.messagesCache[currentAccountId].map(m => [m.id, m]));
+    for (const msg of incoming) {
+      existingMap.set(msg.id, msg);
+    }
+    const messages = Array.from(existingMap.values());
+    window.messagesCache[currentAccountId] = messages;
+
     messagesCountEl.textContent = `${messages.length} رسائل`;
 
     if (messages.length === 0) {
