@@ -1,8 +1,7 @@
 {
   "name": "instant-mail-hub",
   "version": "1.0.0",
-  "description": "Local Multi-Account Email Manager & Receiver powered by Mail.tm",
-  "main": "server.js",
+  "description": "InstantMail Hub",
   "scripts": {
     "start": "node server.js"
   },
