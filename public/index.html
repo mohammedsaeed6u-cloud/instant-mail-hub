@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>بريد إنستانت - InstantMail Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <span class="logo-icon">⚡</span>
+          <div>
+            <h2>بريد إنستانت</h2>
+            <span class="subtitle">إدارة وتخزين البريد الدائم</span>
+          </div>
+        </div>
+        <button id="btn-open-create" class="btn btn-primary btn-block">
+          <span>➕</span> إنشاء بريد جديد
+        </button>
+      </div>
+
+      <div class="accounts-section">
+        <div class="section-title">
+          <span>الحسابات المحفوظة</span>
+          <span id="accounts-count" class="badge">0</span>
+        </div>
+        <div id="accounts-list" class="accounts-list">
+          <!-- Populated by JS -->
+          <div class="loading-state">جاري تحميل الحسابات...</div>
+        </div>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="status-indicator">
+          <span class="dot pulse"></span>
+          <span>متصل بنظام Mail.tm API</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Top Bar -->
+      <header class="top-bar">
+        <div class="active-account-info">
+          <span class="label">الحساب النشط:</span>
+          <div class="address-container">
+            <span id="current-email" class="email-address">لا يوجد حساب محدد</span>
+            <button id="btn-copy-email" class="btn btn-sm btn-outline" title="نسخ العنوان" disabled>
+              📋 نسخ
+            </button>
+          </div>
+        </div>
+        <div class="actions-group">
+          <div class="auto-refresh-toggle">
+            <label class="switch">
+              <input type="checkbox" id="auto-refresh-check" checked>
+              <span class="slider round"></span>
+            </label>
+            <span class="toggle-label">تحديث تلقائي (5 ثوانٍ)</span>
+          </div>
+          <button id="btn-refresh" class="btn btn-secondary">
+            🔄 تحديث الآن
+          </button>
+        </div>
+      </header>
+
+      <!-- Content Split Grid -->
+      <div class="inbox-grid">
+        <!-- Messages Column -->
+        <div class="messages-column">
+          <div class="messages-header">
+            <h3>صندوق الوارد</h3>
+            <span id="messages-count" class="badge">0 رسائل</span>
+          </div>
+          <div id="messages-list" class="messages-list">
+            <div class="empty-state">اختر حساباً من القائمة الجانبية لعرض الرسائل</div>
+          </div>
+        </div>
+
+        <!-- Message Viewer Column -->
+        <div class="viewer-column">
+          <div id="empty-viewer" class="empty-viewer">
+            <div class="empty-illustration">✉️</div>
+            <h3>لم يتم تحديد أي رسالة</h3>
+            <p>انقر على رسالة من القائمة لعرض محتواها وتفاصيلها هنا</p>
+          </div>
+
+          <div id="message-detail" class="message-detail hidden">
+            <!-- OTP Notification Banner if detected -->
+            <div id="otp-card" class="otp-card hidden">
+              <div class="otp-info">
+                <span class="otp-badge">🔑 كود التفعيل المستخرج</span>
+                <span id="otp-code" class="otp-digits">------</span>
+              </div>
+              <button id="btn-copy-otp" class="btn btn-accent btn-sm">📋 نسخ الكود</button>
+            </div>
+
+            <div class="msg-header-card">
+              <h2 id="msg-subject" class="msg-subject">---</h2>
+              <div class="msg-meta">
+                <div><strong>من:</strong> <span id="msg-from">---</span></div>
+                <div><strong>إلى:</strong> <span id="msg-to">---</span></div>
+                <div><strong>التاريخ:</strong> <span id="msg-date">---</span></div>
+              </div>
+            </div>
+
+            <div class="msg-body-wrapper">
+              <div class="view-tabs">
+                <button class="tab-btn active" data-tab="html">عرض HTML</button>
+                <button class="tab-btn" data-tab="text">عرض نصي</button>
+              </div>
+              <div class="tab-content">
+                <iframe id="msg-iframe" class="msg-iframe" sandbox="allow-same-origin"></iframe>
+                <pre id="msg-text-content" class="msg-text-content hidden"></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Create Account Modal -->
+  <div id="create-modal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>إنشاء بريد إلكتروني جديد</h3>
+        <button id="btn-close-modal" class="close-btn">&times;</button>
+      </div>
+      <form id="create-account-form">
+        <div class="form-group">
+          <label for="input-username">اسم المستخدم (اختياري - سيتم توليد اسم عشوائي لو تُرك فارغاً):</label>
+          <div class="input-with-addon">
+            <input type="text" id="input-username" placeholder="مثال: myaccount99" dir="ltr">
+            <span class="addon">@</span>
+            <select id="select-domain" dir="ltr">
+              <option value="">جاري جلب النطاقات...</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="input-note">ملاحظة / وصف (اختياري):</label>
+          <input type="text" id="input-note" placeholder="مثال: لحساب تويتر أو تفعيل خدمة معينة">
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" id="btn-cancel-modal" class="btn btn-secondary">إلغاء</button>
+          <button type="submit" id="btn-submit-create" class="btn btn-primary">إنشاء وحفظ البريد</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

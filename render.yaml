@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: instant-mail-hub
+    env: node
+    plan: free
+    buildCommand: "echo Build complete"
+    startCommand: "node server.js"
+    envVars:
+      - key: PORT
+        value: 10000

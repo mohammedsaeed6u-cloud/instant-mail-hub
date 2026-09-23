@@ -1,0 +1,5 @@
+node_modules/
+data/accounts.json
+.env
+.DS_Store
+Thumbs.db
