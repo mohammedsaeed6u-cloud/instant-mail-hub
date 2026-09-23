@@ -218,6 +218,29 @@ async function deleteAccount(id) {
   await loadAccounts();
 }
 
+// Helper to refresh token if needed
+async function ensureValidToken(acc) {
+  if (!acc || !acc.password) return acc?.token;
+  try {
+    const tRes = await fetch('/api/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address: acc.address, password: acc.password })
+    });
+    if (tRes.ok) {
+      const tData = await tRes.json();
+      if (tData.token) {
+        acc.token = tData.token;
+        persistAccounts(accounts);
+        return acc.token;
+      }
+    }
+  } catch (e) {
+    console.warn('Token renewal error:', e);
+  }
+  return acc?.token;
+}
+
 // Load Messages for current account
 async function loadMessages(isSilent = false) {
   if (!currentAccountId) return;
@@ -229,14 +252,22 @@ async function loadMessages(isSilent = false) {
   }
 
   try {
-    // Try Vercel route first: /api/messages with header
     let res = await fetch('/api/messages', {
       headers: { 'Authorization': `Bearer ${acc.token}` }
     });
 
-    // Fallback to local server route if 404
-    if (res.status === 404) {
-      res = await fetch(`/api/accounts/${currentAccountId}/messages`);
+    if (!res.ok && (res.status === 401 || res.status === 403 || res.status === 500)) {
+      const freshToken = await ensureValidToken(acc);
+      if (freshToken) {
+        res = await fetch('/api/messages', {
+          headers: { 'Authorization': `Bearer ${freshToken}` }
+        });
+      }
+    }
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `HTTP ${res.status}`);
     }
 
     const data = await res.json();
@@ -281,7 +312,7 @@ async function loadMessages(isSilent = false) {
   } catch (err) {
     console.error('Failed to load messages:', err);
     if (!isSilent) {
-      messagesListEl.innerHTML = '<div class="loading-state">فشل الاتصال بجلب الرسائل</div>';
+      messagesListEl.innerHTML = `<div class="loading-state">فشل الاتصال بجلب الرسائل (${err.message})<br><button onclick="loadMessages(false)" class="btn btn-sm btn-outline" style="margin-top:8px">إعادة المحاولة 🔄</button></div>`;
     }
   }
 }
@@ -295,17 +326,21 @@ async function selectMessage(msgId) {
   if (!acc || !acc.token) return;
 
   try {
-    // Try Vercel serverless query first
     let res = await fetch(`/api/messages?msgId=${msgId}`, {
       headers: { 'Authorization': `Bearer ${acc.token}` }
     });
 
-    // Fallback to local server route if needed
-    if (res.status === 404) {
-      res = await fetch(`/api/accounts/${currentAccountId}/messages/${msgId}`);
+    if (!res.ok && (res.status === 401 || res.status === 403 || res.status === 500)) {
+      const freshToken = await ensureValidToken(acc);
+      if (freshToken) {
+        res = await fetch(`/api/messages?msgId=${msgId}`, {
+          headers: { 'Authorization': `Bearer ${freshToken}` }
+        });
+      }
     }
 
     const msg = await res.json();
+    if (!res.ok) throw new Error(msg.error || 'Failed to fetch message');
 
     emptyViewerEl.classList.add('hidden');
     messageDetailEl.classList.remove('hidden');

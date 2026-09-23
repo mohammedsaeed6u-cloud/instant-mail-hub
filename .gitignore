@@ -3,3 +3,6 @@ data/accounts.json
 .env
 .DS_Store
 Thumbs.db
+
+.vercel
+.env*

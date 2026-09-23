@@ -1,3 +1,17 @@
 {
-  "cleanUrls": true
+  "services": {
+    "instant-mail-hub": {
+      "root": ".",
+      "entrypoint": "server.js"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": {
+        "type": "service",
+        "service": "instant-mail-hub"
+      }
+    }
+  ]
 }

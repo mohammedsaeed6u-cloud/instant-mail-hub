@@ -43,9 +43,17 @@ async function mailtmRequest(endpoint, options = {}) {
     headers,
     body: options.body ? JSON.stringify(options.body) : undefined
   });
-  const data = await res.json().catch(() => ({}));
+  let rawText = '';
+  let data = {};
+  try {
+    rawText = await res.text();
+    data = JSON.parse(rawText);
+  } catch (e) {
+    data = { rawText };
+  }
   if (!res.ok) {
-    const errMsg = data.message || data['hydra:description'] || `API Error: ${res.status}`;
+    console.error(`[MailTM Error] ${res.status}:`, rawText);
+    const errMsg = data.message || data['hydra:description'] || `API Error: ${res.status} - ${rawText.slice(0, 150)}`;
     const error = new Error(errMsg);
     error.status = res.status;
     error.data = data;
@@ -134,9 +142,14 @@ const server = http.createServer(async (req, res) => {
 
   try {
     if (pathname === '/api/domains' && req.method === 'GET') {
-      const data = await mailtmRequest('/domains');
-      const domains = (data['hydra:member'] || []).filter(d => d.isActive).map(d => d.domain);
-      return sendJson({ domains });
+      try {
+        const data = await mailtmRequest('/domains');
+        const domains = (data['hydra:member'] || []).filter(d => d.isActive).map(d => d.domain);
+        if (domains && domains.length > 0) return sendJson({ domains });
+      } catch (e) {
+        console.warn('[Domains Fetch Fallback]', e.message);
+      }
+      return sendJson({ domains: ['uberip.com'] });
     }
 
     if (pathname === '/api/accounts' && req.method === 'GET') {
@@ -147,10 +160,17 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/accounts/create' && req.method === 'POST') {
       const body = await parseBody();
       
-      const domainsData = await mailtmRequest('/domains');
-      const availableDomains = (domainsData['hydra:member'] || []).filter(d => d.isActive);
+      let availableDomains = [];
+      try {
+        const domainsData = await mailtmRequest('/domains');
+        availableDomains = (domainsData['hydra:member'] || []).filter(d => d.isActive);
+      } catch (e) {
+        console.warn('[Create Domains Fallback]', e.message);
+        availableDomains = [{ domain: 'uberip.com', isActive: true }];
+      }
+      
       if (!availableDomains.length) {
-        return sendError('No active domains available from mail service', 503);
+        availableDomains = [{ domain: 'uberip.com', isActive: true }];
       }
       
       const domain = body.domain && availableDomains.some(d => d.domain === body.domain)
@@ -193,6 +213,22 @@ const server = http.createServer(async (req, res) => {
       return sendJson({ success: true, account: newAccount }, 201);
     }
 
+    if (pathname === '/api/token' && req.method === 'POST') {
+      const body = await parseBody();
+      if (!body.address || !body.password) {
+        return sendError('Address and password required', 400);
+      }
+      try {
+        const tokenRes = await mailtmRequest('/token', {
+          method: 'POST',
+          body: { address: body.address, password: body.password }
+        });
+        return sendJson(tokenRes);
+      } catch (err) {
+        return sendError(err.message || 'Authentication failed', 401);
+      }
+    }
+
     if (pathname.startsWith('/api/accounts/') && req.method === 'DELETE') {
       const id = pathname.split('/')[3];
       const accounts = loadAccounts();
@@ -214,14 +250,77 @@ const server = http.createServer(async (req, res) => {
       return sendJson({ success: true, message: 'Account removed' });
     }
 
+    // Route for /api/messages with Bearer token
+    if (pathname === '/api/messages' && req.method === 'GET') {
+      const authHeader = req.headers['authorization'] || '';
+      let token = authHeader.replace(/^Bearer\s+/i, '');
+      const parsedUrlObj = new URL(req.url, 'http://localhost');
+      if (!token) token = parsedUrlObj.searchParams.get('token');
+
+      if (!token) {
+        return sendError('Token required', 401);
+      }
+
+      const msgId = parsedUrlObj.searchParams.get('msgId');
+      if (msgId) {
+        try {
+          const msg = await mailtmRequest(`/messages/${msgId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const bodyText = (msg.text || '') + ' ' + (msg.subject || '');
+          return sendJson({
+            id: msg.id,
+            from: msg.from,
+            to: msg.to,
+            subject: msg.subject || '(بدون عنوان)',
+            intro: msg.intro,
+            text: msg.text,
+            html: msg.html ? msg.html[0] : null,
+            attachments: msg.attachments || [],
+            createdAt: msg.createdAt,
+            otp: extractOtp(bodyText)
+          });
+        } catch (e) {
+          return sendError(e.message || 'Error fetching message', 500);
+        }
+      }
+
+      try {
+        const data = await mailtmRequest('/messages', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const rawMessages = data['hydra:member'] || [];
+        const messages = rawMessages.map(m => ({
+          id: m.id,
+          from: m.from ? `${m.from.name || ''} <${m.from.address}>`.trim() : 'Unknown',
+          subject: m.subject || '(بدون عنوان / No Subject)',
+          intro: m.intro || '',
+          createdAt: m.createdAt,
+          seen: m.seen,
+          hasAttachments: m.hasAttachments,
+          size: m.size,
+          otp: extractOtp((m.subject || '') + ' ' + (m.intro || ''))
+        }));
+        return sendJson({ total: data['hydra:totalItems'] || messages.length, messages });
+      } catch (e) {
+        return sendError(e.message || 'Error fetching message list', 500);
+      }
+    }
+
     const messagesMatch = pathname.match(/^\/api\/accounts\/([^/]+)\/messages$/);
     if (messagesMatch && req.method === 'GET') {
       const id = messagesMatch[1];
       const accounts = loadAccounts();
       const account = accounts.find(a => a.id === id);
-      if (!account) return sendError('Account not found', 404);
+      
+      // Token can be from saved account OR from client header
+      let token = req.headers['authorization'] ? req.headers['authorization'].replace(/^Bearer\s+/i, '') : null;
+      if (!token && account) {
+        token = await getAccountToken(account);
+      }
+      
+      if (!token) return sendError('Account or token not found', 404);
 
-      const token = await getAccountToken(account);
       const data = await mailtmRequest('/messages', {
         headers: { Authorization: `Bearer ${token}` }
       });
