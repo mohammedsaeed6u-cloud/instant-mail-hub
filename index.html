@@ -3,11 +3,57 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>بريد إنستانت - InstantMail Hub</title>
+  <title>بريد إنستانت الدائم - InstantMail Hub</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <style>
+    .modal-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 18px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 8px;
+    }
+    .modal-tab-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: var(--font-family);
+      font-size: 0.88rem;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .modal-tab-btn.active {
+      background: rgba(59, 130, 246, 0.15);
+      border-color: var(--primary);
+      color: #60a5fa;
+    }
+    .perm-badge {
+      background: #1e3a8a;
+      color: #93c5fd;
+      font-size: 0.7rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+    .cloud-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #34d399;
+      font-size: 0.72rem;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-weight: 600;
+    }
+  </style>
 </head>
 <body>
   <div class="app-layout">
@@ -18,22 +64,21 @@
           <span class="logo-icon">⚡</span>
           <div>
             <h2>بريد إنستانت</h2>
-            <span class="subtitle">إدارة وتخزين البريد الدائم</span>
+            <span class="subtitle">صناديق بريد دائمة وحفظ سحابي</span>
           </div>
         </div>
         <button id="btn-open-create" class="btn btn-primary btn-block">
-          <span>➕</span> إنشاء بريد جديد
+          <span>➕</span> إنشاء أو ربط بريد دائم
         </button>
       </div>
 
       <div class="accounts-section">
         <div class="section-title">
-          <span>الحسابات المحفوظة</span>
+          <span>الحسابات المحفوظة (دائمة)</span>
           <span id="accounts-count" class="badge">0</span>
         </div>
         <div id="accounts-list" class="accounts-list">
-          <!-- Populated by JS -->
-          <div class="loading-state">جاري تحميل الحسابات...</div>
+          <div class="loading-state">جاري تحميل الحسابات من السحابة...</div>
         </div>
       </div>
 
@@ -44,8 +89,10 @@
           <input type="file" id="file-import-accounts" accept=".json" class="hidden">
         </div>
         <div class="status-indicator">
-          <span class="dot pulse"></span>
-          <span>متصل بنظام Mail.tm API</span>
+          <span class="cloud-badge">
+            <span class="dot pulse" style="background:#10b981;box-shadow:0 0 8px #10b981"></span>
+            مزامنة سحابية دائمة (Supabase)
+          </span>
         </div>
       </div>
     </aside>
@@ -58,6 +105,7 @@
           <span class="label">الحساب النشط:</span>
           <div class="address-container">
             <span id="current-email" class="email-address">لا يوجد حساب محدد</span>
+            <span class="perm-badge" title="هذا البريد دائم ولا تنتهي صلاحيته">دائم ♾️</span>
             <button id="btn-copy-email" class="btn btn-sm btn-outline" title="نسخ العنوان" disabled>
               📋 نسخ
             </button>
@@ -133,34 +181,77 @@
     </main>
   </div>
 
-  <!-- Create Account Modal -->
+  <!-- Create / Reclaim Account Modal -->
   <div id="create-modal" class="modal hidden">
     <div class="modal-backdrop"></div>
     <div class="modal-box">
       <div class="modal-header">
-        <h3>إنشاء بريد إلكتروني جديد</h3>
+        <h3 id="modal-title">إدارة البريد الإلكتروني الدائم</h3>
         <button id="btn-close-modal" class="close-btn">&times;</button>
       </div>
+
+      <div class="modal-tabs">
+        <button type="button" id="tab-create-new" class="modal-tab-btn active">➕ إنشاء بريد دائم جديد</button>
+        <button type="button" id="tab-reclaim-old" class="modal-tab-btn">🔗 استرجاع / ربط بريد سابق</button>
+      </div>
+
+      <!-- Create Form -->
       <form id="create-account-form">
         <div class="form-group">
-          <label for="input-username">اسم المستخدم (اختياري - سيتم توليد اسم عشوائي لو تُرك فارغاً):</label>
+          <label for="input-username">اسم المستخدم (مخصص أو عشوائي):</label>
           <div class="input-with-addon">
-            <input type="text" id="input-username" placeholder="مثال: myaccount99" dir="ltr">
+            <input type="text" id="input-username" placeholder="مثال: mohammed_fb" dir="ltr">
             <span class="addon">@</span>
             <select id="select-domain" dir="ltr">
-              <option value="">جاري جلب النطاقات...</option>
+              <option value="sharklasers.com">sharklasers.com (دائم وسريع)</option>
+              <option value="guerrillamail.com">guerrillamail.com</option>
+              <option value="grr.la">grr.la</option>
+              <option value="guerrillamailblock.com">guerrillamailblock.com</option>
             </select>
           </div>
+          <small style="color:var(--text-muted);font-size:0.75rem;margin-top:4px;display:block">
+            إذا تركته فارغاً، سنقوم بتوليد اسم عشوائي دائم تلقائياً.
+          </small>
         </div>
 
         <div class="form-group">
           <label for="input-note">ملاحظة / وصف (اختياري):</label>
-          <input type="text" id="input-note" placeholder="مثال: لحساب تويتر أو تفعيل خدمة معينة">
+          <input type="text" id="input-note" placeholder="مثال: حساب فيسبوك الأساسي">
         </div>
 
         <div class="modal-actions">
           <button type="button" id="btn-cancel-modal" class="btn btn-secondary">إلغاء</button>
-          <button type="submit" id="btn-submit-create" class="btn btn-primary">إنشاء وحفظ البريد</button>
+          <button type="submit" id="btn-submit-create" class="btn btn-primary">إنشاء وحفظ البريد في السحابة</button>
+        </div>
+      </form>
+
+      <!-- Reclaim Form -->
+      <form id="reclaim-account-form" class="hidden">
+        <div class="form-group">
+          <label for="input-reclaim-address">عنوان البريد السابق أو اسم المستخدم:</label>
+          <div class="input-with-addon">
+            <input type="text" id="input-reclaim-address" placeholder="مثال: mail_bsh26m8 أو mail_bsh26m8@sharklasers.com" dir="ltr">
+            <span class="addon">@</span>
+            <select id="select-reclaim-domain" dir="ltr">
+              <option value="sharklasers.com">sharklasers.com</option>
+              <option value="guerrillamail.com">guerrillamail.com</option>
+              <option value="grr.la">grr.la</option>
+              <option value="guerrillamailblock.com">guerrillamailblock.com</option>
+            </select>
+          </div>
+          <small style="color:#60a5fa;font-size:0.75rem;margin-top:4px;display:block">
+            💡 يمكنك كتابة أي اسم استعملته في الماضي لاسترجاعه واستقبال رسائله فوراً!
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label for="input-reclaim-note">ملاحظة:</label>
+          <input type="text" id="input-reclaim-note" placeholder="مثال: حساب فيسبوك مسترجع">
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" id="btn-cancel-reclaim" class="btn btn-secondary">إلغاء</button>
+          <button type="submit" id="btn-submit-reclaim" class="btn btn-primary">🔗 ربط واسترجاع الحساب الآن</button>
         </div>
       </form>
     </div>
